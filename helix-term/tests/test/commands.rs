@@ -31,11 +31,15 @@ async fn test_read_file() -> anyhow::Result<()> {
     let expected_content = String::from("some contents");
     let output_file = helpers::temp_file_with_contents(&expected_content)?;
     let mut command = String::new();
-    let cmd = format!(
-        ":r {:?}<ret><esc>:w<ret>",
+    let cmd = format!(":r {:?}<ret><esc>:w<ret>", output_file.path());
+    command.push_str(&cmd);
+
+    println!(">>File: {:?}", file.path());
+    println!(">>Output: {:?}", output_file.path());
+    println!(
+        ">>input: {:?}",
         std::fs::canonicalize(output_file.path()).unwrap()
     );
-    command.push_str(&cmd);
 
     test_key_sequence(
         &mut helpers::app_with_file(file.path())?,
