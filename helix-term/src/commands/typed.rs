@@ -1625,10 +1625,9 @@ fn read_file_info_buffer(
         let file = std::fs::File::open(path)?;
         let mut reader = BufReader::new(file);
 
-        match helix_view::document::from_reader(&mut reader, Some(doc.encoding())) {
-            Ok((rope, _)) => {
-                let rope: String = rope.into();
-                let contents = Tendril::from(rope);
+        match from_reader(&mut reader, doc.encoding()) {
+            Ok(contents) => {
+                let contents = Tendril::from(contents);
                 let selection = doc.selection(view.id);
                 let transaction = Transaction::insert(doc.text(), selection, contents);
                 doc.apply(&transaction, view.id);
@@ -1643,6 +1642,56 @@ fn read_file_info_buffer(
     }
 
     Ok(())
+}
+
+/// Stripped down version of [`helix_view::document::from_reader`] which is adapted to use encoding_rs::Decoder::read_to_string
+fn from_reader<R: std::io::Read + ?Sized>(
+    reader: &mut R,
+    encoding: &'static helix_core::encoding::Encoding,
+) -> anyhow::Result<String> {
+    let mut buf = [0u8; 8192];
+
+    let (mut decoder, mut slice, read) = {
+        let read = reader.read(&mut buf)?;
+        let decoder = encoding.new_decoder();
+        let slice = &buf[..read];
+        (decoder, slice, read)
+    };
+
+    let mut is_empty = read == 0;
+    let mut buf_str = String::with_capacity(buf.len());
+
+    loop {
+        let mut total_read = 0usize;
+
+        loop {
+            let (result, read, ..) =
+                decoder.decode_to_string(&slice[total_read..], &mut buf_str, is_empty);
+
+            total_read += read;
+
+            match result {
+                helix_core::encoding::CoderResult::InputEmpty => {
+                    debug_assert_eq!(slice.len(), total_read);
+                    break;
+                }
+                helix_core::encoding::CoderResult::OutputFull => {
+                    debug_assert!(slice.len() > total_read);
+                    buf_str.reserve(buf.len())
+                }
+            }
+        }
+
+        if is_empty {
+            debug_assert_eq!(reader.read(&mut buf)?, 0);
+            break;
+        }
+
+        let read = reader.read(&mut buf)?;
+        slice = &buf[..read];
+        is_empty = read == 0;
+    }
+    Ok(buf_str)
 }
 
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
