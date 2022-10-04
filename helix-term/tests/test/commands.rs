@@ -26,6 +26,38 @@ async fn test_write_quit_fail() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn test_read_file() -> anyhow::Result<()> {
+    let mut file = tempfile::NamedTempFile::new()?;
+    let expected_content = String::from("some contents");
+    let output_file = helpers::temp_file_with_contents(&expected_content)?;
+    let mut command = String::new();
+    let cmd = format!(
+        ":r {:?}<ret><esc>:w<ret>",
+        std::fs::canonicalize(output_file.path()).unwrap()
+    );
+    command.push_str(&cmd);
+
+    test_key_sequence(
+        &mut helpers::app_with_file(file.path())?,
+        Some(&command),
+        Some(&|app| {
+            assert!(!app.editor.is_err(), "error: {:?}", app.editor.get_status());
+        }),
+        false,
+    )
+    .await?;
+
+    file.as_file_mut().flush()?;
+    file.as_file_mut().sync_all()?;
+
+    let mut file_content = String::new();
+    file.as_file_mut().read_to_string(&mut file_content)?;
+    assert_eq!(expected_content, file_content);
+
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore]
 async fn test_buffer_close_concurrent() -> anyhow::Result<()> {
     test_key_sequences(
