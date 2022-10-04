@@ -1622,15 +1622,21 @@ fn read_file_info_buffer(
     let filename = args.get(0).unwrap();
     let path = PathBuf::from(filename.to_string());
     if path.exists() {
-        let file = std::fs::File::open(path)?;
-        let mut reader = BufReader::new(file);
+        match std::fs::File::open(path) {
+            Ok(file) => {
+                let mut reader = BufReader::new(file);
 
-        match from_reader(&mut reader, doc.encoding()) {
-            Ok(contents) => {
-                let contents = Tendril::from(contents);
-                let selection = doc.selection(view.id);
-                let transaction = Transaction::insert(doc.text(), selection, contents);
-                doc.apply(&transaction, view.id);
+                match from_reader(&mut reader, doc.encoding()) {
+                    Ok(contents) => {
+                        let contents = Tendril::from(contents);
+                        let selection = doc.selection(view.id);
+                        let transaction = Transaction::insert(doc.text(), selection, contents);
+                        doc.apply(&transaction, view.id);
+                    }
+                    Err(error) => cx
+                        .editor
+                        .set_error(format!("error reading file: {}", error)),
+                }
             }
             Err(error) => cx
                 .editor
